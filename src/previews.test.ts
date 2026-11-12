@@ -47,8 +47,7 @@ describe("createImageResolver", () => {
     const text = await replaceMentions("Файл: кот.png", resolve, shown);
     assert.equal(warnings.length, 0);
     assert.match(text, /!\[кот\.png\]\(lms-imgview-[0-9a-f]{12}\.jpg\)/);
-    assert.match(text, /\[кот\.png\]\(<\/.+кот\.png>\)/);
-    assert.doesNotMatch(text, /file:/);
+    assert.match(text, /\[кот\.png\]\(<file:\/\/\/.+%D0%BA%D0%BE%D1%82\.png>\)/);
 
     const preview = path.join(images, ".preview", "кот.e100.q60.jpg");
     const previewImage = await Jimp.read(await readFile(preview));
@@ -101,7 +100,7 @@ describe("createImageResolver", () => {
     const resolved = await resolve("plain.png");
     assert.ok(resolved);
     assert.match(resolved.markdown, /!\[plain\.png\]\(lms-imgview-[0-9a-f]{12}\.png\)/);
-    assert.doesNotMatch(resolved.markdown, /file:/);
+    assert.match(resolved.markdown, /\[plain\.png\]\(<file:\/\/\/.+plain\.png>\)/);
     const copiedName = resolved.markdown.match(/lms-imgview-[0-9a-f]{12}\.png/)?.[0] ?? "";
     const copied = await readFile(path.join(work, copiedName));
     const original = await readFile(source);
@@ -111,14 +110,14 @@ describe("createImageResolver", () => {
 });
 
 describe("imageMarkdown", () => {
-  it("links to the absolute path and spells out a Windows path", () => {
+  it("links to the original with a file URL", () => {
     assert.equal(
       imageMarkdown("cat.png", "chat.png", "/images/my cat.png"),
-      "![cat.png](chat.png)\n\n[cat.png](</images/my cat.png>)",
+      "![cat.png](chat.png)\n\n[cat.png](<file:///images/my%20cat.png>)",
     );
     assert.equal(
       imageMarkdown("cat.png", "chat.png", "C:\\images\\cat.png"),
-      "![cat.png](chat.png)\n\n`C:\\images\\cat.png`",
+      "![cat.png](chat.png)\n\n[cat.png](<file:///C:/images/cat.png>)",
     );
   });
 });

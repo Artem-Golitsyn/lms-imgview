@@ -19,7 +19,7 @@ If that file is in the folder you choose, lms-imgview replaces the line with the
 ```markdown
 ![cat.png](lms-imgview-a1b2c3d4e5f6.png)
 
-[cat.png](</path/to/images/cat.png>)
+[cat.png](<file:///path/to/images/cat.png>)
 ```
 
 With **Make preview** on, the picture in the chat is a compressed JPEG. It is scaled down on both width and height so the longer side fits inside a square (512 pixels by default).
@@ -43,7 +43,7 @@ Then, in the app:
 2. Open the plugin gear and set **Images directory** to the folder your generator writes into.
 3. Send a prompt that produces a `File:` or `Файл:` line for a picture that is already in that folder.
 
-The picture appears in the assistant message. The line under it is the path of the original file.
+The picture appears in the assistant message. The line under it is a `file://` link to the original file.
 
 To develop with a rebuild on every save, run `npx lms dev` from this directory instead of `--install`. Enable the plugin in the chat after the dev server is up. Use `npx lms dev --install` again when you want a normal installed copy.
 
@@ -97,15 +97,13 @@ Pictures built from a tool result are attached to the assistant message and are 
 
 ## The line under the picture
 
-LM Studio's chat removes link addresses that use the `file:` scheme, so a `file://` link never becomes clickable. The line under the picture is a markdown link whose address is the absolute path of the original file:
+The line under the picture is a markdown link. Its address is a `file://` URL of the original file:
 
 ```markdown
-[cat.png](</path/to/images/cat.png>)
+[cat.png](<file:///path/to/images/cat.png>)
 ```
 
-A click opens LM Studio's link popover, where that path can be copied. The app does not open the file from the chat. The picture itself is the copy in the chat working directory; use the image menu on that picture to reveal the copy.
-
-A Windows path such as `C:\images\cat.png` is shown as text. A link address with a drive letter is removed by the same sanitizer.
+A Windows path uses the same form, for example `file:///C:/images/cat.png`. The picture itself is the copy in the chat working directory; use the image menu on that picture to reveal the copy.
 
 ## Notes
 

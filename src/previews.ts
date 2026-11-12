@@ -84,17 +84,23 @@ export function imageMarkdown(displayName: string, imageSrc: string, originalPat
   return `![${label}](${imageSrc})\n\n${originalReference(label, originalPath)}`;
 }
 
-/**
- * LM Studio's chat markdown drops any `file:` address, so the link uses the absolute path.
- * A drive path such as `C:\...` contains a colon and is dropped the same way, so it is shown as text.
- */
+/** Link under the picture. The address is a file URL of the original. */
 function originalReference(label: string, originalPath: string): string {
-  if (!isChatLinkPath(originalPath)) return `\`${originalPath.replace(/`/g, "")}\``;
-  return `[${label}](<${originalPath.replace(/[<>]/g, "")}>)`;
+  return `[${label}](<${fileHref(originalPath)}>)`;
 }
 
-function isChatLinkPath(filePath: string): boolean {
-  return filePath.startsWith("/") && !filePath.includes(":");
+function fileHref(filePath: string): string {
+  const drive = /^([A-Za-z]):[\\/](.*)$/.exec(filePath);
+  if (drive && process.platform !== "win32") {
+    const rest = drive[2]
+      .replace(/\\/g, "/")
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return `file:///${drive[1]}:/${rest}`;
+  }
+  return pathToFileURL(filePath).href;
 }
 
 async function findImage(library: ImageLibrary, ref: string): Promise<string | null> {
