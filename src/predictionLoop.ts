@@ -1,4 +1,3 @@
-import path from "node:path";
 import type {
   GeneratorPredictionResult,
   LLM,
@@ -22,8 +21,8 @@ interface TextState {
 }
 
 /**
- * Reply loop. The model and MCP tools run as usual, and a File: name in the
- * text or in a tool result is replaced with a preview.
+ * Reply loop. The model and MCP tools run as usual. A picture path in ordinary
+ * reply text is replaced with the image. JSON, code, and quotes are left alone.
  */
 export async function predictionLoop(ctl: PredictionLoopHandlerController): Promise<void> {
   const history = await ctl.pullHistory();
@@ -226,26 +225,13 @@ function readLibrary(ctl: PredictionLoopHandlerController): ImageLibrary | null 
   const config = ctl.getGlobalPluginConfig(globalConfigSchematics);
   const imagesDirectory = config.get("imagesDirectory").trim();
   if (!imagesDirectory) return null;
-  const previewOverride = config.get("previewDirectory").trim();
   let workDirectory: string | null = null;
   try {
     workDirectory = ctl.getWorkingDirectory() || null;
   } catch {
     workDirectory = null;
   }
-  return {
-    imagesDirectory,
-    previewDirectory: previewOverride || path.join(imagesDirectory, ".preview"),
-    maxPreviewEdge: clamp(config.get("maxPreviewEdge"), 64, 2048, 512),
-    previewQuality: clamp(config.get("previewQuality"), 30, 95, 70),
-    makePreview: config.get("makePreview") === true,
-    workDirectory,
-  };
-}
-
-function clamp(value: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(value)));
+  return { imagesDirectory, workDirectory };
 }
 
 async function openTools(

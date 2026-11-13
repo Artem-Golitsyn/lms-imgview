@@ -14,15 +14,13 @@ or, from generators that print a Russian label:
 Файл: cat.png
 ```
 
-If that file is in the folder you choose, lms-imgview replaces the line with the picture. A path works without a label too, for example `/path/to/images/cat.png` or `images/cat.png`, when that file exists. By default the original file is copied into the chat as it is. Turn on **Make preview** to show a smaller JPEG instead, and keep the original untouched on disk either way.
+If that file is in the folder you choose, lms-imgview replaces the line with the picture. A path works without a label too, for example `/path/to/images/cat.png` or `images/cat.png`, when that file exists. The original file is copied into the chat.
 
 ```markdown
 ![cat.png](lms-imgview-a1b2c3d4e5f6.png)
 
 [cat.png](</path/to/images/cat.png>)
 ```
-
-With **Make preview** on, the picture in the chat is a compressed JPEG. It is scaled down on both width and height so the longer side fits inside a square (512 pixels by default).
 
 ## Install
 
@@ -56,10 +54,6 @@ Settings are global: one folder for every chat. Open them from the gear next to 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Images directory | empty | Folder of original images. The plugin does nothing with pictures until this is set. |
-| Make preview | off | Off: the original file is copied into the chat. On: a smaller JPEG is created and that JPEG is what the chat shows. |
-| Preview directory | `<images directory>/.preview` | Where compressed JPEGs are stored. Shown when **Make preview** is on. An empty value uses `.preview` inside the images directory. The folder is created if it does not exist. |
-| Maximum preview edge | 512 | Longest side of the preview, in pixels. The other side shrinks by the same ratio. Images that are already smaller stay at their original size. Shown when **Make preview** is on. |
-| Preview JPEG quality | 70 | JPEG quality from 30 to 95. Lower values make a smaller file. Shown when **Make preview** is on. |
 
 ## What gets replaced
 
@@ -91,6 +85,15 @@ file:///path/to/images/shot.jpeg
 
 A bare name such as `cat.png` still needs `File:` or `Файл:`, so a sentence that only mentions the name stays as text. A path that is not in the images directory also stays as text.
 
+These parts of a reply are left as they are, even when they contain a picture path:
+
+- fenced code, including ` ``` ` and `~~~`
+- a line indented as code
+- a blockquote (`> ...`)
+- a JSON object or array
+
+An MCP tool result is often JSON with no markdown marker. Paths inside that JSON are not turned into pictures. A `File:` line or a path in the ordinary reply text still is.
+
 Recognized extensions: `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `avif`, `tif`, `tiff`.
 
 A name is resolved in this order:
@@ -98,13 +101,12 @@ A name is resolved in this order:
 1. An absolute path, a `file://` URL, or a path relative to the images directory, when that path stays inside the directory.
 2. The file name alone, searched recursively through the images directory.
 
-Text inside fenced ` ``` ` code blocks is left alone. A name that is not in the directory stays as text. The same file is shown once per reply; a later mention that sits on its own line is removed. Paths that escape the images directory, including `..` and symlinks that point outside, are ignored. Generated preview files are not treated as originals.
+A name that is not in the directory stays as text. The same file is shown once per reply; a later mention that sits on its own line is removed. Paths that escape the images directory, including `..` and symlinks that point outside, are ignored. Old generated preview files (`name.e512.q70.jpg`) are not treated as originals.
 
 ## Where the files go
 
 - **Originals** stay in the images directory.
-- **The picture in the chat** is a new copy in the chat working directory, named `lms-imgview-` plus a unique id. A later message gets its own copy, so every post in the chat can show its picture. LM Studio renders a markdown image when the file is in that working directory. With **Make preview** off, the copy is the original file, extension included. With **Make preview** on, the copy is the JPEG preview.
-- **Cached previews** are written only when **Make preview** is on, under the preview directory. The file name records the settings, for example `cat.e512.q70.jpg`. A preview is reused when it is newer than the original.
+- **The picture in the chat** is a new copy of the original in the chat working directory, named `lms-imgview-` plus a unique id. A later message gets its own copy, so every post in the chat can show its picture. LM Studio renders a markdown image when the file is in that working directory.
 
 Pictures built from a tool result are attached to the assistant message and are not sent back to the model, so the model still sees the tool's original text.
 
@@ -123,8 +125,8 @@ A Windows path such as `C:\images\cat.png` is shown as text. A link address with
 ## Notes
 
 - lms-imgview runs the prediction loop itself. Model text, tool confirmation, and MCP tool calls still go through that loop. Enable only one plugin that takes over the prediction loop.
-- With **Make preview** on, PNG, JPEG, GIF, BMP, and TIFF originals can be turned into previews. WebP and AVIF names are recognized; if the decoder cannot read the file, the mention stays as text and a debug note is written. With **Make preview** off, the original bytes are copied and no decoder is required.
-- The plugin sandbox is off. lms-imgview needs to read the folder you choose and, when previews are on, write them.
+- The original bytes are copied into the chat. No decoder and no preview file are required.
+- The plugin sandbox is off. lms-imgview needs to read the folder you choose and copy pictures into the chat.
 - Until **Images directory** is set, mentions are left as text and the chat shows a status asking you to set the folder.
 
 ## Develop

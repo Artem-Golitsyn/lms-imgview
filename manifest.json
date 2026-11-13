@@ -3,9 +3,9 @@
   "runner": "node",
   "owner": "local",
   "name": "lms-imgview",
-  "description": "Replaces a File: image name in the reply with the picture itself, or a compressed preview when that option is on.",
+  "description": "Replaces an image path, or a File: name, in the reply with the picture itself.",
   "sandbox": {
     "enabled": false,
-    "reason": "Reads the configured image directory and, when Make preview is on, writes compressed previews."
+    "reason": "Reads the configured image directory and copies pictures into the chat."
   }
 }

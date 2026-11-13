@@ -46,8 +46,7 @@ export function hasMention(text: string): boolean {
 
 export function findMentions(text: string): Mention[] {
   const mentions: Mention[] = [];
-  for (const region of codeRegions(text)) {
-    if (region.code) continue;
+  for (const region of proseRegions(text)) {
     const labeled = mentionsIn(region, mentionPattern(), true);
     const paths = mentionsIn(region, pathPattern(), false).filter(
       (pathMention) => !labeled.some((mention) => pathMention.start < mention.end && pathMention.end > mention.start),
@@ -204,29 +203,157 @@ function includeWrappingBackticks(text: string, start: number, end: number): { s
 }
 
 interface Region {
-  code: boolean;
   start: number;
   value: string;
 }
 
-/** Leaves text inside fenced ``` blocks alone. An unclosed fence counts as code too. */
-function codeRegions(text: string): Region[] {
+interface Range {
+  start: number;
+  end: number;
+}
+
+interface Line {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * Plain prose only. Code fences, indented code, blockquotes, and JSON values
+ * stay as text. An MCP result is often a JSON block with no markdown marker.
+ */
+function proseRegions(text: string): Region[] {
+  const skipped = mergeRanges([
+    ...fenceRanges(text),
+    ...blockquoteRanges(text),
+    ...indentedCodeRanges(text),
+    ...jsonRanges(text),
+  ]);
   const regions: Region[] = [];
-  const fence = /```/g;
   let cursor = 0;
-  let inCode = false;
-  for (const match of text.matchAll(fence)) {
-    const index = match.index ?? 0;
-    if (index > cursor) {
-      regions.push({ code: inCode, start: cursor, value: text.slice(cursor, index) });
-    }
-    inCode = !inCode;
-    cursor = index + match[0].length;
+  for (const range of skipped) {
+    if (range.start > cursor) regions.push({ start: cursor, value: text.slice(cursor, range.start) });
+    cursor = Math.max(cursor, range.end);
   }
-  if (cursor < text.length) {
-    regions.push({ code: inCode, start: cursor, value: text.slice(cursor) });
-  }
+  if (cursor < text.length) regions.push({ start: cursor, value: text.slice(cursor) });
   return regions;
+}
+
+function linesOf(text: string): Line[] {
+  const lines: Line[] = [];
+  let start = 0;
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] !== "\n") continue;
+    lines.push({ start, end: index + 1, text: text.slice(start, index) });
+    start = index + 1;
+  }
+  lines.push({ start, end: text.length, text: text.slice(start) });
+  return lines;
+}
+
+/** ``` and ~~~ fences. An unclosed fence counts through the end of the text. */
+function fenceRanges(text: string): Range[] {
+  const ranges: Range[] = [];
+  let open: { char: string; len: number; start: number } | null = null;
+  for (const line of linesOf(text)) {
+    const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line.text);
+    if (!open) {
+      if (match) open = { char: match[2][0] ?? "`", len: match[2].length, start: line.start };
+      continue;
+    }
+    if (match && match[2][0] === open.char && match[2].length >= open.len && match[3].trim() === "") {
+      ranges.push({ start: open.start, end: line.end });
+      open = null;
+    }
+  }
+  if (open) ranges.push({ start: open.start, end: text.length });
+  return ranges;
+}
+
+function blockquoteRanges(text: string): Range[] {
+  return lineRuns(text, (line) => /^ {0,3}>/.test(line));
+}
+
+function indentedCodeRanges(text: string): Range[] {
+  return lineRuns(text, (line) => /^(?: {4}|\t)/.test(line) && line.trim() !== "");
+}
+
+function lineRuns(text: string, inside: (line: string) => boolean): Range[] {
+  const ranges: Range[] = [];
+  let start: number | null = null;
+  let end = 0;
+  for (const line of linesOf(text)) {
+    if (inside(line.text)) {
+      start ??= line.start;
+      end = line.end;
+      continue;
+    }
+    if (start !== null) {
+      ranges.push({ start, end });
+      start = null;
+    }
+  }
+  if (start !== null) ranges.push({ start, end });
+  return ranges;
+}
+
+/** Objects and arrays. MCP tools often return a picture path inside JSON. */
+function jsonRanges(text: string): Range[] {
+  const ranges: Range[] = [];
+  for (let index = 0; index < text.length; index++) {
+    const ch = text[index];
+    if (ch !== "{" && ch !== "[") continue;
+    if (index > 0 && /[\p{L}\p{N}_]/u.test(text[index - 1] ?? "")) continue;
+    const end = jsonValueEnd(text, index);
+    if (end === null) continue;
+    ranges.push({ start: index, end });
+    index = end - 1;
+  }
+  return ranges;
+}
+
+function jsonValueEnd(text: string, start: number): number | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let index = start; index < text.length; index++) {
+    const ch = text[index];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") depth += 1;
+    else if (ch === "}" || ch === "]") {
+      depth -= 1;
+      if (depth !== 0) continue;
+      const slice = text.slice(start, index + 1);
+      try {
+        const value = JSON.parse(slice) as unknown;
+        if (value !== null && typeof value === "object") return index + 1;
+      } catch {
+        return null;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+function mergeRanges(ranges: Range[]): Range[] {
+  const sorted = ranges.filter((range) => range.end > range.start).sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: Range[] = [];
+  for (const range of sorted) {
+    const last = merged.at(-1);
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ start: range.start, end: range.end });
+  }
+  return merged;
 }
 
 function lineBounds(text: string, start: number, end: number): { start: number; end: number; endOfContent: number } {

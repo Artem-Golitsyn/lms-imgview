@@ -1,6 +1,6 @@
 {
   "name": "lms-imgview",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "LM Studio plugin that shows an image in the chat when a reply names an image file.",
   "main": "dist/index.js",
   "type": "commonjs",
@@ -13,8 +13,7 @@
   "author": "Your Name",
   "license": "UNLICENSED",
   "dependencies": {
-    "@lmstudio/sdk": "^2.1.0",
-    "jimp": "^1.6.1"
+    "@lmstudio/sdk": "^2.1.0"
   },
   "gitHead": "0eca19214f508db23c0807598fcba63cb8ba7557",
   "devDependencies": {

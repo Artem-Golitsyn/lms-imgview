@@ -52,6 +52,26 @@ describe("findMentions", () => {
     );
   });
 
+  it("leaves quotes, indented code, tilde fences, and JSON alone", () => {
+    const text = [
+      "> File: quote.png",
+      "    File: indented.png",
+      "~~~",
+      "File: tilde.png",
+      "~~~",
+      "{",
+      '  "file": "/tmp/out/from-json.png"',
+      "}",
+      '{"path":"/tmp/out/inline.png"}',
+      "File: kept.png",
+      "See /tmp/out/kept.png",
+    ].join("\n");
+    assert.deepEqual(
+      findMentions(text).map((mention) => mention.ref),
+      ["kept.png", "/tmp/out/kept.png"],
+    );
+  });
+
   it("does not find a second path inside a File label or a code fence", () => {
     const text = "File: /tmp/out/cat.png\n```\n/tmp/hidden.png\n```\nSee images/cover.webp";
     assert.deepEqual(
