@@ -36,6 +36,29 @@ describe("findMentions", () => {
     const [mention] = findMentions("Done. File: /tmp/out/cat.png.");
     assert.equal(mention?.ref, "/tmp/out/cat.png");
   });
+
+  it("finds image paths without a File label and leaves a bare name", () => {
+    const text = [
+      "Saved /tmp/out/cat.png.",
+      "also images/кот.png",
+      "and file:///tmp/out/shot.jpeg",
+      'plus "C:\\images\\my cat.png"',
+      "and C:\\images\\cat.png",
+      "but not cat.png in a sentence",
+    ].join("\n");
+    assert.deepEqual(
+      findMentions(text).map((mention) => mention.ref),
+      ["/tmp/out/cat.png", "images/кот.png", "file:///tmp/out/shot.jpeg", "C:\\images\\my cat.png", "C:\\images\\cat.png"],
+    );
+  });
+
+  it("does not find a second path inside a File label or a code fence", () => {
+    const text = "File: /tmp/out/cat.png\n```\n/tmp/hidden.png\n```\nSee images/cover.webp";
+    assert.deepEqual(
+      findMentions(text).map((mention) => mention.ref),
+      ["/tmp/out/cat.png", "images/cover.webp"],
+    );
+  });
 });
 
 describe("replaceMentions", () => {
@@ -74,6 +97,19 @@ describe("replaceMentions", () => {
   it("keeps a backtick that belongs to later text", async () => {
     const next = await replaceMentions("File: cat.png\nsee `code`", resolver({ "cat.png": "/img/cat.png" }), new Set());
     assert.match(next, /see `code`/);
+  });
+
+  it("replaces a path when the file exists and keeps one that does not", async () => {
+    const next = await replaceMentions(
+      "Look /tmp/out/cat.png and /tmp/missing.png.\nFile: cat.png",
+      resolver({ "/tmp/out/cat.png": "/img/from-path", "cat.png": "/img/from-label" }),
+      new Set(),
+    );
+    assert.match(next, /!\[\/tmp\/out\/cat\.png\]/);
+    assert.match(next, /!\[cat\.png\]/);
+    assert.match(next, /\/tmp\/missing\.png/);
+    assert.doesNotMatch(next, /File:/);
+    assert.match(next, /Look/);
   });
 });
 

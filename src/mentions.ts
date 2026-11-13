@@ -1,13 +1,34 @@
 /**
- * Finds generator lines such as "File: name.png" or "Файл: name.png"
- * and replaces those mentions.
+ * Finds image mentions in a reply and replaces those that exist on disk.
+ * A mention is either a File:/Файл: label or a path that contains a folder separator.
  */
 
 const EXTENSION_RE = /\.(?:png|jpe?g|webp|gif|bmp|avif|tiff?)$/iu;
+const EXTENSION = "png|jpe?g|webp|gif|bmp|avif|tiff?";
 
 /** \x60 is a backtick. A fresh RegExp per call keeps lastIndex from racing across tasks. */
 function mentionPattern(): RegExp {
-  return /(?<![\p{L}\p{N}_])(?:\*{1,2}|_{1,2})?(?:Файл|File)(?:\*{1,2}|_{1,2})?\s*:\s*(?:\*{1,2}|_{1,2})?\s*(?:"([^"\n]+)"|'([^'\n]+)'|\x60([^\x60\n]+)\x60|\[([^\]\n]+)\]|([^\n]*?\.(?:png|jpe?g|webp|gif|bmp|avif|tiff?)))/giu;
+  return /(?<![\p{L}\p{N}_])(?:\*{1,2}|_{1,2})?(?:Файл|File)(?:\*{1,2}|_{1,2})?\s*:(?!\s*[/\\]{2})\s*(?:\*{1,2}|_{1,2})?\s*(?:"([^"\n]+)"|'([^'\n]+)'|\x60([^\x60\n]+)\x60|\[([^\]\n]+)\]|([^\n]*?\.(?:png|jpe?g|webp|gif|bmp|avif|tiff?)))/giu;
+}
+
+/**
+ * Paths without a File: label. A bare name such as cat.png is not a path:
+ * that still requires File: or Файл:, so ordinary sentences stay as text.
+ */
+function pathPattern(): RegExp {
+  const name = "[^\\s<>\"'`()\\[\\]\\\\/]+";
+  const ext = `\\.(?:${EXTENSION})`;
+  const unquoted = [
+    `file://\\S+?${ext}`,
+    `[A-Za-z]:[\\\\/](?:${name}[\\\\/])*${name}${ext}`,
+    `(?:\\.{1,2}[\\\\/]|[\\\\/])(?:${name}[\\\\/])*${name}${ext}`,
+    `(?:${name}[\\\\/])+${name}${ext}`,
+  ].join("|");
+  const quoted = `[^"'\\x60\\n]*[\\\\/][^"'\\x60\\n]*${ext}`;
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}_])(?:\"(?:${quoted})\"|'(?:${quoted})'|\\x60(?:${quoted})\\x60|<(?:${quoted})>|${unquoted})`,
+    "giu",
+  );
 }
 
 export interface Mention {
@@ -27,23 +48,33 @@ export function findMentions(text: string): Mention[] {
   const mentions: Mention[] = [];
   for (const region of codeRegions(text)) {
     if (region.code) continue;
-    for (const match of region.value.matchAll(mentionPattern())) {
-      const raw = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? "";
-      const ref = cleanRef(raw);
-      if (!EXTENSION_RE.test(ref)) continue;
-      const localStart = match.index ?? 0;
-      const bounds = includeWrappingBackticks(
-        region.value,
-        localStart,
-        localStart + match[0].length,
-      );
-      let start = region.start + bounds.start;
-      const end = region.start + bounds.end;
-      const previousEnd = mentions.at(-1)?.end ?? 0;
-      if (start < previousEnd) start = previousEnd;
-      if (end <= start) continue;
-      mentions.push({ start, end, ref });
-    }
+    const labeled = mentionsIn(region, mentionPattern(), true);
+    const paths = mentionsIn(region, pathPattern(), false).filter(
+      (pathMention) => !labeled.some((mention) => pathMention.start < mention.end && pathMention.end > mention.start),
+    );
+    mentions.push(...labeled, ...paths);
+  }
+  mentions.sort((a, b) => a.start - b.start);
+  return mentions;
+}
+
+function mentionsIn(region: Region, pattern: RegExp, labeled: boolean): Mention[] {
+  const mentions: Mention[] = [];
+  for (const match of region.value.matchAll(pattern)) {
+    const raw = labeled ? (match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? "") : match[0];
+    const ref = cleanRef(raw);
+    if (!EXTENSION_RE.test(ref)) continue;
+    const localStart = match.index ?? 0;
+    const localEnd = localStart + match[0].length;
+    const bounds = labeled
+      ? includeWrappingBackticks(region.value, localStart, localEnd)
+      : includeWrappingQuotes(region.value, localStart, localEnd);
+    let start = region.start + bounds.start;
+    const end = region.start + bounds.end;
+    const previousEnd = mentions.at(-1)?.end ?? region.start;
+    if (start < previousEnd) start = previousEnd;
+    if (end <= start) continue;
+    mentions.push({ start, end, ref });
   }
   return mentions;
 }
@@ -124,7 +155,9 @@ function cleanRef(raw: string): string {
   if (
     (value.startsWith("[") && value.endsWith("]")) ||
     (value.startsWith("(") && value.endsWith(")")) ||
-    (value.startsWith("<") && value.endsWith(">"))
+    (value.startsWith("<") && value.endsWith(">")) ||
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
   ) {
     value = value.slice(1, -1).trim();
   }
@@ -138,6 +171,20 @@ function cleanRef(raw: string): string {
  * A model often wraps the whole File line in backticks, or leaves a lone backtick
  * on the next line. Those characters are not part of the file name.
  */
+function includeWrappingQuotes(text: string, start: number, end: number): { start: number; end: number } {
+  const pairs: Array<[string, string]> = [
+    ['"', '"'],
+    ["'", "'"],
+    ["`", "`"],
+    ["<", ">"],
+  ];
+  if (start === 0 || end >= text.length) return { start, end };
+  for (const [open, close] of pairs) {
+    if (text[start - 1] === open && text[end] === close) return { start: start - 1, end: end + 1 };
+  }
+  return { start, end };
+}
+
 function includeWrappingBackticks(text: string, start: number, end: number): { start: number; end: number } {
   let from = start;
   let to = end;

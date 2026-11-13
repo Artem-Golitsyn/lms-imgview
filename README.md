@@ -1,6 +1,6 @@
 # lms-imgview
 
-An [LM Studio](https://lmstudio.ai) plugin that turns a named image file in a reply into a picture you can see.
+An [LM Studio](https://lmstudio.ai) plugin that turns an image path, or a `File:` / `Файл:` name, in a reply into a picture you can see.
 
 Image tools such as z-image often end a turn with a line like this:
 
@@ -14,7 +14,7 @@ or, from generators that print a Russian label:
 Файл: cat.png
 ```
 
-If that file is in the folder you choose, lms-imgview replaces the line with the picture. By default the original file is copied into the chat as it is. Turn on **Make preview** to show a smaller JPEG instead, and keep the original untouched on disk either way.
+If that file is in the folder you choose, lms-imgview replaces the line with the picture. A path works without a label too, for example `/path/to/images/cat.png` or `images/cat.png`, when that file exists. By default the original file is copied into the chat as it is. Turn on **Make preview** to show a smaller JPEG instead, and keep the original untouched on disk either way.
 
 ```markdown
 ![cat.png](lms-imgview-a1b2c3d4e5f6.png)
@@ -63,7 +63,9 @@ Settings are global: one folder for every chat. Open them from the gear next to 
 
 ## What gets replaced
 
-A mention is a label, a colon, and an image name. Both of these labels are recognized:
+A picture is shown when the reply names a file that exists in the images directory. Two forms are recognized.
+
+A labeled mention is a label, a colon, and an image name. Both of these labels are recognized:
 
 - `File:`
 - `Файл:`
@@ -77,6 +79,17 @@ File: `shot.jpeg`
 File: [cover.webp]
 `File: cat.png`
 ```
+
+A path needs no label. Absolute paths, `file://` URLs, and relative paths that contain a folder are recognized. Quotes or angle brackets around the path are removed with it:
+
+```text
+/path/to/images/cat.png
+images/кот.png
+file:///path/to/images/shot.jpeg
+"C:\images\my cat.png"
+```
+
+A bare name such as `cat.png` still needs `File:` or `Файл:`, so a sentence that only mentions the name stays as text. A path that is not in the images directory also stays as text.
 
 Recognized extensions: `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `avif`, `tif`, `tiff`.
 
