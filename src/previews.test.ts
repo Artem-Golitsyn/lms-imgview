@@ -108,6 +108,31 @@ describe("createImageResolver", () => {
     assert.deepEqual(copied, original);
     await assert.rejects(stat(path.join(images, ".preview", "plain.e8.q40.jpg")));
   });
+
+  it("writes a separate chat file for each post of the same image", async () => {
+    const source = path.join(images, "again.png");
+    await new Jimp({ width: 12, height: 8, color: 0xff8800ff }).write(source as `${string}.${string}`);
+    const library = {
+      imagesDirectory: images,
+      previewDirectory: path.join(images, ".preview"),
+      maxPreviewEdge: 32,
+      previewQuality: 70,
+      makePreview: false,
+      workDirectory: work,
+    };
+    const first = await createImageResolver(library, () => undefined)("again.png");
+    const second = await createImageResolver(library, () => undefined)("again.png");
+    assert.ok(first);
+    assert.ok(second);
+    const nameOf = (markdown: string) => markdown.match(/lms-imgview-[0-9a-f]{12}\.png/)?.[0] ?? "";
+    const firstName = nameOf(first.markdown);
+    const secondName = nameOf(second.markdown);
+    assert.notEqual(firstName, "");
+    assert.notEqual(firstName, secondName);
+    const original = await readFile(source);
+    assert.deepEqual(await readFile(path.join(work, firstName)), original);
+    assert.deepEqual(await readFile(path.join(work, secondName)), original);
+  });
 });
 
 describe("imageMarkdown", () => {

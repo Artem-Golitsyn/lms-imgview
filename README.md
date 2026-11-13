@@ -90,7 +90,7 @@ Text inside fenced ` ``` ` code blocks is left alone. A name that is not in the 
 ## Where the files go
 
 - **Originals** stay in the images directory.
-- **The picture in the chat** is a copy in the chat working directory, named `lms-imgview-` plus a short hash. LM Studio renders a markdown image when the file is in that working directory. With **Make preview** off, the copy is the original file, extension included. With **Make preview** on, the copy is the JPEG preview.
+- **The picture in the chat** is a new copy in the chat working directory, named `lms-imgview-` plus a unique id. A later message gets its own copy, so every post in the chat can show its picture. LM Studio renders a markdown image when the file is in that working directory. With **Make preview** off, the copy is the original file, extension included. With **Make preview** on, the copy is the JPEG preview.
 - **Cached previews** are written only when **Make preview** is on, under the preview directory. The file name records the settings, for example `cat.e512.q70.jpg`. A preview is reused when it is newer than the original.
 
 Pictures built from a tool result are attached to the assistant message and are not sent back to the model, so the model still sees the tool's original text.

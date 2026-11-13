@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { copyFile, mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -218,13 +218,26 @@ async function ensurePreview(library: ImageLibrary, original: string): Promise<s
   return dest;
 }
 
+/**
+ * Each message gets its own copy. A stable name is reused by the chat and the
+ * picture in a later post does not appear.
+ */
 async function publishToChat(workDirectory: string | null, sourcePath: string, extension: string): Promise<string> {
   if (!workDirectory) return pathToFileURL(sourcePath).href;
   await mkdir(workDirectory, { recursive: true });
   const suffix = extension.startsWith(".") ? extension : `.${extension}`;
-  const name = `lms-imgview-${createHash("sha256").update(sourcePath).digest("hex").slice(0, 12)}${suffix}`;
+  const name = await unusedChatName(workDirectory, suffix);
   await copyFile(sourcePath, path.join(workDirectory, name));
   return name;
+}
+
+async function unusedChatName(workDirectory: string, suffix: string): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const name = `lms-imgview-${randomBytes(6).toString("hex")}${suffix}`;
+    const existing = await stat(path.join(workDirectory, name)).catch(() => null);
+    if (!existing) return name;
+  }
+  return `lms-imgview-${randomBytes(6).toString("hex")}${suffix}`;
 }
 
 function isInside(root: string, target: string): boolean {
