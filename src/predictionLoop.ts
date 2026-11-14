@@ -8,6 +8,7 @@ import type {
   Tool,
   ToolCallContext,
 } from "@lmstudio/sdk";
+import { isToolPreapproved, readToolApprovalSettings } from "./approvals.js";
 import { globalConfigSchematics } from "./config.js";
 import { hasMention, markdownForNewMentions, replaceMentions } from "./mentions.js";
 import { createImageResolver, imagesDirectoryMissingMessage, type ImageLibrary } from "./previews.js";
@@ -152,25 +153,37 @@ export async function predictionLoop(ctl: PredictionLoopHandlerController): Prom
         statuses.get(callId)?.setStatus({ type: "toolCallGenerationFailed", error: error.message });
       },
       guardToolCall: async (_round, callId, guard) => {
-        statuses.get(callId)?.setStatus({ type: "confirmingToolCall" });
         try {
           const pluginIdentifier = guard.tool.type === "remoteTool" ? guard.tool.pluginIdentifier : undefined;
-          const confirmation = await ctl.requestConfirmToolCall({
-            callId,
+          const preapproved = isToolPreapproved(
+            await readToolApprovalSettings(),
             pluginIdentifier,
-            name: guard.toolCallRequest.name,
-            parameters: guard.toolCallRequest.arguments ?? {},
-          });
-          ctl.abortSignal.throwIfAborted();
-          if (confirmation.type === "deny") {
-            statuses.get(callId)?.setStatus({ type: "toolCallDenied", denyReason: confirmation.denyReason });
-            guard.deny(confirmation.denyReason ?? "Tool call denied.");
-            return;
+            guard.toolCallRequest.name,
+          );
+          if (!preapproved) {
+            statuses.get(callId)?.setStatus({ type: "confirmingToolCall" });
+            const confirmation = await ctl.requestConfirmToolCall({
+              callId,
+              pluginIdentifier,
+              name: guard.toolCallRequest.name,
+              parameters: guard.toolCallRequest.arguments ?? {},
+            });
+            ctl.abortSignal.throwIfAborted();
+            if (confirmation.type === "deny") {
+              statuses.get(callId)?.setStatus({ type: "toolCallDenied", denyReason: confirmation.denyReason });
+              guard.deny(confirmation.denyReason ?? "Tool call denied.");
+              return;
+            }
+            if (confirmation.toolArgsOverride) {
+              startedAt.set(callId, performance.now());
+              statuses.get(callId)?.setStatus({ type: "callingTool" });
+              guard.allowAndOverrideParameters(confirmation.toolArgsOverride);
+              return;
+            }
           }
           startedAt.set(callId, performance.now());
           statuses.get(callId)?.setStatus({ type: "callingTool" });
-          if (confirmation.toolArgsOverride) guard.allowAndOverrideParameters(confirmation.toolArgsOverride);
-          else guard.allow();
+          guard.allow();
         } catch (error) {
           if (ctl.abortSignal.aborted) {
             guard.deny("Stopped.");

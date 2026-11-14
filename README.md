@@ -124,7 +124,7 @@ A Windows path such as `C:\images\cat.png` is shown as text. A link address with
 
 ## Notes
 
-- lms-imgview runs the prediction loop itself. Model text, tool confirmation, and MCP tool calls still go through that loop. Enable only one plugin that takes over the prediction loop.
+- lms-imgview runs the prediction loop itself. Model text, tool confirmation, and MCP tool calls still go through that loop. Enable only one plugin that takes over the prediction loop. A tool you already set to **Always allow** in LM Studio is not asked about again. A tool without that choice still asks.
 - The original bytes are copied into the chat. No decoder and no preview file are required.
 - The plugin sandbox is off. lms-imgview needs to read the folder you choose and copy pictures into the chat.
 - Until **Images directory** is set, mentions are left as text and the chat shows a status asking you to set the folder.
